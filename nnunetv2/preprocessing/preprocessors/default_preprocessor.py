@@ -385,9 +385,6 @@ class DefaultPreprocessor(object):
             for k in tqdm(dataset.keys(), total=len(dataset)):
                 if exists(join(output_directory, k + '.npz')) and exists(join(output_directory, k + '.pkl')):
                     continue
-                if k not in ('case_00223',):
-                    continue
-                print(f"[debug] encountered {k}")
                 r.append(self.run_case_save(join(output_directory, k), dataset[k]['images'], dataset[k]['label'],
                                             plans_manager, configuration_manager,
                                             dataset_json))
@@ -398,6 +395,8 @@ class DefaultPreprocessor(object):
                 # So we need to store the original pool of workers.
                 workers = [j for j in p._pool]
                 for k in dataset.keys():
+                    if exists(join(output_directory, k + '.npz')) and exists(join(output_directory, k + '.pkl')):
+                        continue
                     r.append(p.starmap_async(self.run_case_save,
                                              ((join(output_directory, k), dataset[k]['images'], dataset[k]['label'],
                                                plans_manager, configuration_manager,
