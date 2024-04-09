@@ -25,13 +25,13 @@ class BaseReaderWriter(ABC):
             return True
         else:
             # compare all entries to the first
-            return np.allclose(input_list[0], input_list[1:])
+            return np.allclose(input_list[0], input_list[1:], rtol=1e-3)
 
     @staticmethod
     def _check_all_same_array(input_list):
         # compare all entries to the first
         for i in input_list[1:]:
-            if i.shape != input_list[0].shape or not np.allclose(i, input_list[0]):
+            if i.shape != input_list[0].shape or not np.allclose(i, input_list[0], rtol=1e-3):
                 return False
         return True
 
