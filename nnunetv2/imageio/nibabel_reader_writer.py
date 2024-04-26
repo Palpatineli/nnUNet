@@ -183,10 +183,10 @@ class NibabelIOWithReorient(BaseReaderWriter):
         ras_ornt = axcodes2ornt("RAS")
         from_canonical = ornt_transform(ras_ornt, img_ornt)
         seg_nib_reoriented = seg_nib.as_reoriented(from_canonical)
-        if not np.allclose(properties['nibabel_stuff']['original_affine'], seg_nib_reoriented.affine):
-            print(f'WARNING: Restored affine does not match original affine. File: {output_fname}')
-            print(f'Original affine\n', properties['nibabel_stuff']['original_affine'])
-            print(f'Restored affine\n', seg_nib_reoriented.affine)
+        # if not np.allclose(properties['nibabel_stuff']['original_affine'], seg_nib_reoriented.affine):
+        #     print(f'WARNING: Restored affine does not match original affine. File: {output_fname}')
+        #     print(f'Original affine\n', properties['nibabel_stuff']['original_affine'])
+        #     print(f'Restored affine\n', seg_nib_reoriented.affine)
         nibabel.save(seg_nib_reoriented, output_fname)
 
 
