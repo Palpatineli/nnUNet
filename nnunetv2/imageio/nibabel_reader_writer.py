@@ -12,7 +12,7 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
-
+import warnings
 from typing import Tuple, Union, List
 import numpy as np
 from nibabel import io_orientation
@@ -29,9 +29,8 @@ class NibabelIO(BaseReaderWriter):
     IMPORTANT: Run nnUNetv2_plot_overlay_pngs to verify that this did not destroy the alignment of data and seg!
     """
     supported_file_endings = [
+        '.nii',
         '.nii.gz',
-        '.nrrd',
-        '.mha'
     ]
 
     def read_images(self, image_fnames: Union[List[str], Tuple[str, ...]]) -> Tuple[np.ndarray, dict]:
@@ -107,9 +106,8 @@ class NibabelIOWithReorient(BaseReaderWriter):
     IMPORTANT: Run nnUNetv2_plot_overlay_pngs to verify that this did not destroy the alignment of data and seg!
     """
     supported_file_endings = [
+        '.nii',
         '.nii.gz',
-        '.nrrd',
-        '.mha'
     ]
 
     def read_images(self, image_fnames: Union[List[str], Tuple[str, ...]]) -> Tuple[np.ndarray, dict]:
@@ -179,8 +177,10 @@ class NibabelIOWithReorient(BaseReaderWriter):
 
         seg_nib = nibabel.Nifti1Image(seg, affine=properties['nibabel_stuff']['reoriented_affine'])
         seg_nib_reoriented = seg_nib.as_reoriented(io_orientation(properties['nibabel_stuff']['original_affine']))
-        assert np.allclose(properties['nibabel_stuff']['original_affine'], seg_nib_reoriented.affine), \
-            'restored affine does not match original affine'
+        if not np.allclose(properties['nibabel_stuff']['original_affine'], seg_nib_reoriented.affine):
+            print(f'WARNING: Restored affine does not match original affine. File: {output_fname}')
+            print(f'Original affine\n', properties['nibabel_stuff']['original_affine'])
+            print(f'Restored affine\n', seg_nib_reoriented.affine)
         nibabel.save(seg_nib_reoriented, output_fname)
 
 
