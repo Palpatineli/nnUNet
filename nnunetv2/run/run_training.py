@@ -94,6 +94,7 @@ def maybe_load_checkpoint(nnunet_trainer: nnUNetTrainer, continue_training: bool
             load_pretrained_weights(nnunet_trainer.network, pretrained_weights_file, verbose=True)
         expected_checkpoint_file = None
 
+    # continued training or validation only
     if expected_checkpoint_file is not None:
         nnunet_trainer.load_checkpoint(expected_checkpoint_file)
 
