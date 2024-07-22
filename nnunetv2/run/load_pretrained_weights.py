@@ -1,10 +1,37 @@
+import warnings
 import torch
 from torch._dynamo import OptimizedModule
+from torch import Tensor, nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 
 
-def load_pretrained_weights(network, fname, verbose=False):
+def upkern(model_layer: Tensor, pretrained_layer: Tensor) -> Tensor:
+    inc1, outc1, *spatial_dims1 = model_layer.shape
+    inc2, outc2, *spatial_dims2 = pretrained_layer.shape
+    print(inc1, outc1, spatial_dims1, inc2, outc2, spatial_dims2)
+
+    # Please use equal in_channels in all layers for resizing pretrainer
+    # Please use equal out_channels in all layers for resizing pretrainer
+    assert inc1 == inc2 and outc1 == outc2, (
+        f"The shape of model layer is not the same. Pretrained model: "
+        f"{pretrained_layer.shape}; your network: {model_layer.shape}."
+    )
+
+    if spatial_dims1 == spatial_dims2:
+        model_layer = pretrained_layer
+        print(f"Key {k} loaded.")
+    else:
+        model_layer = torch.nn.functional.interpolate(
+            pretrained_layer, size=spatial_dims1, mode="trilinear"
+        )
+        print(
+            f"Key {k} interpolated trilinearly from {spatial_dims2}->{spatial_dims1} and loaded."
+        )
+    return model_layer
+
+
+def load_pretrained_weights(network: nn.Module, fname, verbose=False):
     """
     Transfers all weights between matching keys in state_dicts. matching is done by name and we only transfer if the
     shape is also the same. Segmentation layers (the 1x1(x1) layers that produce the segmentation maps)
@@ -23,7 +50,7 @@ def load_pretrained_weights(network, fname, verbose=False):
     pretrained_dict = saved_model['network_weights']
 
     skip_strings_in_pretrained = [
-        '.seg_layers.',
+        ".seg_layers.",
     ]
 
     if isinstance(network, DDP):
@@ -37,13 +64,20 @@ def load_pretrained_weights(network, fname, verbose=False):
     # verify that all but the segmentation layers have the same shape
     for key, _ in model_dict.items():
         if all([i not in key for i in skip_strings_in_pretrained]):
-            assert key in pretrained_dict, \
-                f"Key {key} is missing in the pretrained model weights. The pretrained weights do not seem to be " \
+            assert key in pretrained_dict, (
+                f"Key {key} is missing in the pretrained model weights. The pretrained weights do not seem to be "
                 f"compatible with your network."
-            assert model_dict[key].shape == pretrained_dict[key].shape, \
-                f"The shape of the parameters of key {key} is not the same. Pretrained model: " \
-                f"{pretrained_dict[key].shape}; your network: {model_dict[key]}. The pretrained model " \
-                f"does not seem to be compatible with your network."
+            )
+            if model_dict[key].shape != pretrained_dict[key].shape:
+                try:
+                    if key.rsplit('.', maxsplit=1)[1] in ("bias", "norm", "dummy"):  # bias, norm and dummy layers
+                        print(f"Key {key} loaded unchanged.")
+                        model_dict[key] = pretrained_dict[key]
+                    else:  # Conv / linear layers
+                        model_dict[key] = upkern(model_dict[key], pretrained_dict[key])
+                except AssertionError as e:
+                    e.add_note(f"Incompatibility between model and pretrained checkpoint at key {key}")
+                    raise e
 
     # fun fact: in principle this allows loading from parameters that do not cover the entire network. For example pretrained
     # encoders. Not supported by this function though (see assertions above)
@@ -54,17 +88,25 @@ def load_pretrained_weights(network, fname, verbose=False):
     #                    if (('module.' + k if is_ddp else k) in model_dict) and
     #                    all([i not in k for i in skip_strings_in_pretrained])}
 
-    pretrained_dict = {k: v for k, v in pretrained_dict.items()
-                       if k in model_dict.keys() and all([i not in k for i in skip_strings_in_pretrained])}
+    pretrained_dict = {
+        k: v
+        for k, v in pretrained_dict.items()
+        if k in model_dict.keys()
+        and all([i not in k for i in skip_strings_in_pretrained])
+    }
 
     model_dict.update(pretrained_dict)
 
-    print("################### Loading pretrained weights from file ", fname, '###################')
+    print(
+        "################### Loading pretrained weights from file ",
+        fname,
+        "###################",
+    )
     if verbose:
-        print("Below is the list of overlapping blocks in pretrained model and nnUNet architecture:")
+        print(
+            "Below is the list of overlapping blocks in pretrained model and nnUNet architecture:"
+        )
         for key, value in pretrained_dict.items():
-            print(key, 'shape', value.shape)
+            print(key, "shape", value.shape)
         print("################### Done ###################")
     mod.load_state_dict(model_dict)
-
-
