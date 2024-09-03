@@ -893,7 +893,11 @@ class nnUNetTrainer(object):
         if isinstance(mod, OptimizedModule):
             mod = mod._orig_mod
 
-        mod.decoder.deep_supervision = enabled
+        decoder = getattr(mod, "decoder", None)
+        if decoder is not None:
+            decoder.deep_supervision = enabled
+        else:
+            self.deep_supervision = enabled
 
     def on_train_start(self):
         if not self.was_initialized:
