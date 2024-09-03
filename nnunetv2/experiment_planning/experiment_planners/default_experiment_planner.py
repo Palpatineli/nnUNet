@@ -25,7 +25,7 @@ class ExperimentPlanner(object):
     def __init__(self, dataset_name_or_id: Union[str, int],
                  gpu_memory_target_in_gb: float = 8,
                  preprocessor_name: str = 'DefaultPreprocessor', plans_name: str = 'nnUNetPlans',
-                 overwrite_target_spacing: Union[List[float], Tuple[float, ...]] = None,
+                 overwrite_target_spacing: Union[List[float], Tuple[float, ...], None] = None,
                  suppress_transpose: bool = False):
         """
         overwrite_target_spacing only affects 3d_fullres! (but by extension 3d_lowres which starts with fullres may
