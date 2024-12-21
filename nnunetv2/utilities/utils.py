@@ -14,12 +14,13 @@
 #    limitations under the License.
 import os.path
 from functools import lru_cache
-from typing import Union
+from typing import Dict, List, Set, TypedDict
 
 from batchgenerators.utilities.file_and_folder_operations import *
 import numpy as np
 import re
 
+from torch import nn
 from nnunetv2.paths import nnUNet_raw
 from multiprocessing import Pool
 
@@ -72,6 +73,30 @@ def get_filenames_of_train_images_and_targets(raw_dataset_folder: str, dataset_j
         segs = [join(raw_dataset_folder, 'labelsTr', i + dataset_json['file_ending']) for i in identifiers]
         dataset = {i: {'images': im, 'label': se} for i, im, se in zip(identifiers, images, segs)}
     return dataset
+
+
+class ParamConfig(TypedDict):
+    params: List[nn.parameter.Parameter]
+    weight_decay_scale: float
+    lr_scale: float
+
+def get_param_groups(model: nn.Module, no_weight_decay_keys: Set[str] | None = None) -> List[ParamConfig]:
+    para_groups: Dict[str, ParamConfig] = {}
+    
+    for name, para in model.named_parameters():
+        if not para.requires_grad:
+            continue  # frozen weights
+        if len(para.shape) == 1 or name.endswith('.bias') or \
+            (no_weight_decay_keys is not None and any(k in name for k in no_weight_decay_keys)):
+            wd_scale, group_name = 0., 'no_decay'
+        else:
+            wd_scale, group_name = 1., 'decay'
+        
+        if group_name not in para_groups:
+            para_groups[group_name] = {'params': [], 'weight_decay_scale': wd_scale, 'lr_scale': 1.}
+        para_groups[group_name]['params'].append(para)
+    
+    return list(para_groups.values())
 
 
 if __name__ == '__main__':
