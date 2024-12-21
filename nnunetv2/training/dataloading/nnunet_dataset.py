@@ -9,9 +9,9 @@ from nnunetv2.training.dataloading.utils import get_case_identifiers
 
 
 class nnUNetDataset(object):
-    def __init__(self, folder: str, case_identifiers: List[str] = None,
+    def __init__(self, folder: str, case_identifiers: List[str] | None = None,
                  num_images_properties_loading_threshold: int = 0,
-                 folder_with_segs_from_previous_stage: str = None):
+                 folder_with_segs_from_previous_stage: str | None = None):
         """
         This does not actually load the dataset. It merely creates a dictionary where the keys are training case names and
         the values are dictionaries containing the relevant information for that case.
