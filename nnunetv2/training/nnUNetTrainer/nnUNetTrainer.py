@@ -142,13 +142,17 @@ class nnUNetTrainer(object):
                 if self.is_cascaded else None
 
         ### Some hyperparameters for you to fiddle with
-        self.initial_lr = 1e-2
+        self.initial_lr = self.plans_manager.plans.get('initial_lr', 1e-2)
+        print(f"[hyperparameters] initial_lr: {self.initial_lr}")
+        self.lr_exponent = self.plans_manager.plans.get('lr_exponent', 0.9)
+        print(f"[hyperparameters] lr_exponent: {self.lr_exponent}")
         self.weight_decay = 3e-5
         self.oversample_foreground_percent = 0.33
         self.probabilistic_oversampling = False
         self.num_iterations_per_epoch = 250
         self.num_val_iterations_per_epoch = 50
-        self.num_epochs = 1000
+        self.num_epochs = self.plans_manager.plans.get('num_epochs', 1000)
+        print(f"[hyperparameters] num_epochs: {self.num_epochs}")
         self.current_epoch = 0
         self.enable_deep_supervision = True
 
@@ -184,7 +188,7 @@ class nnUNetTrainer(object):
         # self.configure_rotation_dummyDA_mirroring_and_inital_patch_size and will be saved in checkpoints
 
         ### checkpoint saving stuff
-        self.save_every = 50
+        self.save_every = self.plans_manager.plans.get('save_every', 50)
         self.disable_checkpointing = False
 
         self.was_initialized = False
@@ -507,7 +511,7 @@ class nnUNetTrainer(object):
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.network.parameters(), self.initial_lr, weight_decay=self.weight_decay,
                                     momentum=0.99, nesterov=True)
-        lr_scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs)
+        lr_scheduler = PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs, self.lr_exponent)
         return optimizer, lr_scheduler
 
     def plot_network_architecture(self):
