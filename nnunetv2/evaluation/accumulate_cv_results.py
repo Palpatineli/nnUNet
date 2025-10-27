@@ -7,6 +7,7 @@ from nnunetv2.configuration import default_num_processes
 from nnunetv2.evaluation.evaluate_predictions import compute_metrics_on_folder
 from nnunetv2.paths import nnUNet_raw, nnUNet_preprocessed
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
+from nnunetv2.utilities.utils import copy_no_perms
 
 
 def accumulate_cv_results(trained_model_folder,
@@ -26,8 +27,8 @@ def accumulate_cv_results(trained_model_folder,
     dataset_json = load_json(join(trained_model_folder, 'dataset.json'))
     plans_manager = PlansManager(join(trained_model_folder, 'plans.json'))
     rw = plans_manager.image_reader_writer_class()
-    shutil.copy(join(trained_model_folder, 'dataset.json'), join(merged_output_folder, 'dataset.json'))
-    shutil.copy(join(trained_model_folder, 'plans.json'), join(merged_output_folder, 'plans.json'))
+    copy_no_perms(join(trained_model_folder, 'dataset.json'), join(merged_output_folder, 'dataset.json'))
+    copy_no_perms(join(trained_model_folder, 'plans.json'), join(merged_output_folder, 'plans.json'))
 
     did_we_copy_something = False
     for f in folds:
@@ -39,7 +40,7 @@ def accumulate_cv_results(trained_model_folder,
             if overwrite and isfile(join(merged_output_folder, pf)):
                 raise RuntimeError(f'More than one of your folds has a prediction for case {pf}')
             if overwrite or not isfile(join(merged_output_folder, pf)):
-                shutil.copy(join(expected_validation_folder, pf), join(merged_output_folder, pf))
+                copy_no_perms(join(expected_validation_folder, pf), join(merged_output_folder, pf))
                 did_we_copy_something = True
 
     if did_we_copy_something or not isfile(join(merged_output_folder, 'summary.json')):

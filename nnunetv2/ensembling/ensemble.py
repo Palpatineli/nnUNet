@@ -1,7 +1,6 @@
 import argparse
 import multiprocessing
 import os
-import shutil
 from copy import deepcopy
 from typing import List, Union, Tuple
 
@@ -13,6 +12,7 @@ from nnunetv2.configuration import default_num_processes
 from nnunetv2.imageio.base_reader_writer import BaseReaderWriter
 from nnunetv2.utilities.label_handling.label_handling import LabelManager
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
+from nnunetv2.utilities.utils import copy_no_perms
 
 
 def average_probabilities(list_of_files: List[str]) -> np.ndarray:
@@ -203,5 +203,5 @@ def ensemble_crossvalidations(list_of_trained_model_folders: List[str],
             )
         )
 
-    shutil.copy(join(list_of_trained_model_folders[0], 'plans.json'), join(output_folder, 'plans.json'))
-    shutil.copy(join(list_of_trained_model_folders[0], 'dataset.json'), join(output_folder, 'dataset.json'))
+    copy_no_perms(join(list_of_trained_model_folders[0], 'plans.json'), join(output_folder, 'plans.json'))
+    copy_no_perms(join(list_of_trained_model_folders[0], 'dataset.json'), join(output_folder, 'dataset.json'))
