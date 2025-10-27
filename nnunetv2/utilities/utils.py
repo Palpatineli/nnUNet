@@ -12,6 +12,9 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+import os
+import shutil
+import threading
 import os.path
 from functools import lru_cache
 from typing import Union
@@ -24,6 +27,9 @@ from nnunetv2.paths import nnUNet_raw
 from multiprocessing import Pool
 
 
+_CHMOD_LOCK = threading.Lock()
+
+
 def get_identifiers_from_splitted_dataset_folder(folder: str, file_ending: str):
     files = subfiles(folder, suffix=file_ending, join=False)
     # all files have a 4 digit channel index (_XXXX)
@@ -32,6 +38,40 @@ def get_identifiers_from_splitted_dataset_folder(folder: str, file_ending: str):
     # only unique image ids
     files = np.unique(files)
     return files
+
+
+def _should_copy(src: str, dst: str, follow_symlinks: bool) -> bool:
+    """ Return True if dst must be (re)written. """
+    if not os.path.exists(dst):
+        return True
+    if follow_symlinks:
+        src_stat, dst_stat = os.stat(src), os.stat(dst)
+    else:
+        src_stat, dst_stat = os.lstat(src), os.lstat(dst)
+    return src_stat.st_mtime_ns > dst_stat.st_mtime_ns
+
+
+def copy_no_perms(src: str | os.PathLike[str], dst: str | os.PathLike[str], *, follow_symlinks: bool = True,
+                  update: bool = False) -> str:
+    """Copy without enforcing permissions change. Safe for some remote drive situation."""
+    src, dst = os.fspath(src), os.fspath(dst)
+    if update and not _should_copy(src, dst, follow_symlinks):
+        return dst
+    shutil.copyfile(src, dst, follow_symlinks=follow_symlinks)
+    try:
+        st = os.stat(src, follow_symlinks=follow_symlinks)
+    except OSError:
+        return dst
+    try:
+        os.utime(dst, ns=(st.st_atime_ns, st.st_mtime_ns), follow_symlinks=False)
+    except OSError:
+        pass
+    with _CHMOD_LOCK:
+        try:
+            os.chown(dst, st.st_uid, st.st_gid, follow_symlinks=False)
+        except (OSError, PermissionError, AttributeError):
+            pass
+    return dst
 
 
 def create_paths_fn(folder, files, file_ending, f):

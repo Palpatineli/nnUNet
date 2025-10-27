@@ -65,6 +65,7 @@ from nnunetv2.utilities.get_network_from_plans import get_network_from_plans
 from nnunetv2.utilities.helpers import empty_cache, dummy_context
 from nnunetv2.utilities.label_handling.label_handling import convert_labelmap_to_one_hot, determine_num_input_channels
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
+from nnunetv2.utilities.utils import copy_no_perms
 
 
 class nnUNetTrainer(object):
@@ -927,8 +928,8 @@ class nnUNetTrainer(object):
         save_json(self.dataset_json, join(self.output_folder_base, 'dataset.json'), sort_keys=False)
 
         # we don't really need the fingerprint but its still handy to have it with the others
-        shutil.copy(join(self.preprocessed_dataset_folder_base, 'dataset_fingerprint.json'),
-                    join(self.output_folder_base, 'dataset_fingerprint.json'))
+        copy_no_perms(join(self.preprocessed_dataset_folder_base, 'dataset_fingerprint.json'),
+                      join(self.output_folder_base, 'dataset_fingerprint.json'))
 
         # produces a pdf in output folder
         self.plot_network_architecture()

@@ -16,6 +16,7 @@ from nnunetv2.paths import nnUNet_raw
 from nnunetv2.utilities.file_path_utilities import folds_tuple_to_string
 from nnunetv2.utilities.json_export import recursive_fix_for_json_export
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
+from nnunetv2.utilities.utils import copy_no_perms
 
 
 def remove_all_but_largest_component_from_segmentation(segmentation: np.ndarray,
@@ -217,7 +218,7 @@ def determine_postprocessing(folder_predictions: str,
                     print(f'Removing all but the largest component for {label_or_region} did not improve results! '
                           f'Dice before: {round(baseline_results["mean"][label_or_region]["Dice"], 5)} '
                           f'after: {round(pp_results["mean"][label_or_region]["Dice"], 5)}')
-    [shutil.copy(join(source, i), join(output_folder, i)) for i in subfiles(source, join=False)]
+    [copy_no_perms(join(source, i), join(output_folder, i)) for i in subfiles(source, join=False)]
     save_pickle((pp_fns, pp_fn_kwargs), join(folder_predictions, 'postprocessing.pkl'))
 
     baseline_results = load_summary_json(join(folder_predictions, 'summary.json'))
