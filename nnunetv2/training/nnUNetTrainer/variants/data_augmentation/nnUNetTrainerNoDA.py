@@ -4,10 +4,10 @@ import numpy as np
 from batchgeneratorsv2.helpers.scalar_type import RandomScalar
 from batchgeneratorsv2.transforms.base.basic_transform import BasicTransform
 
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer import nnUNetTrainer
 
 
-class nnUNetTrainerNoDA(nnUNetTrainer):
+class nnUNetTrainerNoDA(nnUNetTrainer.nnUNetTrainer):
     @staticmethod
     def get_training_transforms(
             patch_size: Union[np.ndarray, Tuple[int]],

@@ -2,10 +2,10 @@ import torch
 from torch.optim import Adam, AdamW
 
 from nnunetv2.training.lr_scheduler.polylr import PolyLRScheduler
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer import nnUNetTrainer
 
 
-class nnUNetTrainerAdam(nnUNetTrainer):
+class nnUNetTrainerAdam(nnUNetTrainer.nnUNetTrainer):
     def configure_optimizers(self):
         optimizer = AdamW(self.network.parameters(),
                           lr=self.initial_lr,

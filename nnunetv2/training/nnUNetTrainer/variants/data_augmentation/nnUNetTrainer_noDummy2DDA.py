@@ -1,9 +1,9 @@
 from nnunetv2.training.data_augmentation.compute_initial_patch_size import get_patch_size
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer import nnUNetTrainer
 import numpy as np
 
 
-class nnUNetTrainer_noDummy2DDA(nnUNetTrainer):
+class nnUNetTrainer_noDummy2DDA(nnUNetTrainer.nnUNetTrainer):
     def configure_rotation_dummyDA_mirroring_and_inital_patch_size(self):
         do_dummy_2d_data_aug = False
 

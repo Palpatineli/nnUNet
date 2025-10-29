@@ -3,7 +3,7 @@ from typing import List, Tuple, Union
 import torch
 from torch import nn, autocast
 from dynamic_network_architectures.architectures.primus import Primus
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer import nnUNetTrainer
 from nnunetv2.training.nnUNetTrainer.variants.lr_schedule.nnUNetTrainer_warmup import nnUNetTrainer_warmup
 from torch.nn.parallel import DistributedDataParallel as DDP
 from nnunetv2.training.lr_scheduler.warmup import Lin_incr_LRScheduler, PolyLRScheduler_offset
@@ -228,7 +228,7 @@ class nnUNet_Primus_M_Trainer_BS8_2e4(nnUNet_Primus_M_Trainer):
         self.configuration_manager.configuration["batch_size"] = 8
 
 
-class nnUNet_Trainer_BS8(nnUNetTrainer):
+class nnUNet_Trainer_BS8(nnUNetTrainer.nnUNetTrainer):
 
     def __init__(
         self,

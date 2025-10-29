@@ -1,8 +1,8 @@
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer import nnUNetTrainer
 import torch
 
 
-class nnUNetTrainerNoDeepSupervision(nnUNetTrainer):
+class nnUNetTrainerNoDeepSupervision(nnUNetTrainer.nnUNetTrainer):
     def __init__(
         self,
         plans: dict,

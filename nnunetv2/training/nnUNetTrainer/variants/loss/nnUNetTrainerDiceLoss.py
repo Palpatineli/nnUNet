@@ -4,11 +4,11 @@ import torch
 from nnunetv2.training.loss.compound_losses import DC_and_BCE_loss, DC_and_CE_loss
 from nnunetv2.training.loss.deep_supervision import DeepSupervisionWrapper
 from nnunetv2.training.loss.dice import MemoryEfficientSoftDiceLoss
-from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
+from nnunetv2.training.nnUNetTrainer import nnUNetTrainer
 from nnunetv2.utilities.helpers import softmax_helper_dim1
 
 
-class nnUNetTrainerDiceLoss(nnUNetTrainer):
+class nnUNetTrainerDiceLoss(nnUNetTrainer.nnUNetTrainer):
     def _build_loss(self):
         loss = MemoryEfficientSoftDiceLoss(**{'batch_dice': self.configuration_manager.batch_dice,
                                     'do_bg': self.label_manager.has_regions, 'smooth': 1e-5, 'ddp': self.is_ddp},
@@ -29,7 +29,7 @@ class nnUNetTrainerDiceLoss(nnUNetTrainer):
         return loss
 
 
-class nnUNetTrainerDiceCELoss_noSmooth(nnUNetTrainer):
+class nnUNetTrainerDiceCELoss_noSmooth(nnUNetTrainer.nnUNetTrainer):
     def _build_loss(self):
         # set smooth to 0
         if self.label_manager.has_regions:
