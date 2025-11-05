@@ -7,7 +7,7 @@ import warnings
 from copy import deepcopy
 from datetime import datetime
 from time import time, sleep
-from typing import Tuple, Union, List
+from typing import Tuple, Union, List, cast
 
 import numpy as np
 import torch
@@ -28,7 +28,7 @@ from batchgeneratorsv2.transforms.nnunet.seg_to_onehot import MoveSegAsOneHotToD
 from batchgeneratorsv2.transforms.noise.gaussian_blur import GaussianBlurTransform
 from batchgeneratorsv2.transforms.spatial.low_resolution import SimulateLowResolutionTransform
 from batchgeneratorsv2.transforms.spatial.mirroring import MirrorTransform
-from batchgeneratorsv2.transforms.spatial.spatial import SpatialTransform
+from batchgeneratorsv2.transforms.spatial.spatial import SpatialTransform, sp
 from batchgeneratorsv2.transforms.utils.compose import ComposeTransforms
 from batchgeneratorsv2.transforms.utils.deep_supervision_downsampling import DownsampleSegForDSTransform
 from batchgeneratorsv2.transforms.utils.nnunet_masking import MaskImageTransform
@@ -36,7 +36,7 @@ from batchgeneratorsv2.transforms.utils.pseudo2d import Convert3DTo2DTransform, 
 from batchgeneratorsv2.transforms.utils.random import RandomTransform
 from batchgeneratorsv2.transforms.utils.remove_label import RemoveLabelTansform
 from batchgeneratorsv2.transforms.utils.seg_to_regions import ConvertSegmentationToRegionsTransform
-from torch import autocast, nn
+from torch import Tensor, autocast, nn
 from torch import distributed as dist
 from torch._dynamo import OptimizedModule
 from torch.cuda import device_count
@@ -121,7 +121,7 @@ class nnUNetTrainer(object):
 
         ### Setting all the folder names. We need to make sure things don't crash in case we are just running
         # inference and some of the folders may not be defined!
-        self.preprocessed_dataset_folder_base = join(nnUNet_preprocessed, self.plans_manager.dataset_name) \
+        self.preprocessed_dataset_folder_base: str = join(nnUNet_preprocessed, self.plans_manager.dataset_name) \
             if nnUNet_preprocessed is not None else None
         self.output_folder_base = join(nnUNet_results, self.plans_manager.dataset_name,
                                        self.__class__.__name__ + '__' + self.plans_manager.plans_name + "__" + configuration) \
@@ -163,7 +163,7 @@ class nnUNetTrainer(object):
         # needed for predictions. We do sigmoid in case of (overlapping) regions
 
         self.num_input_channels = None  # -> self.initialize()
-        self.network = None  # -> self.build_network_architecture()
+        self.network: nn.Module = None  # -> self.build_network_architecture()  # pyright: ignore[reportAttributeAccessIssue]
         self.optimizer = self.lr_scheduler = None  # -> self.initialize
         self.grad_scaler = GradScaler("cuda") if self.device.type == 'cuda' else None
         self.loss = None  # -> self.initialize
@@ -283,7 +283,15 @@ class nnUNetTrainer(object):
                     else:
                         # print(k)
                         pass
-                if k in ['dataloader_train', 'dataloader_val']:
+                if k == 'dataloader_train':
+                    for idx, x in enumerate(getattr(self, k)):
+                        if hasattr(x, 'generator'):
+                            dct[k + f'{idx:02d}.generator'] = str(x.generator)
+                        if hasattr(x, 'num_processes'):
+                            dct[k + f'{idx:02d}.num_processes'] = str(x.num_processes)
+                        if hasattr(x, 'transform'):
+                            dct[k + f'{idx:02d}.transform'] = str(x.transform)
+                if k == 'dataloader_val':
                     if hasattr(getattr(self, k), 'generator'):
                         dct[k + '.generator'] = str(getattr(self, k).generator)
                     if hasattr(getattr(self, k), 'num_processes'):
@@ -613,14 +621,29 @@ class nnUNetTrainer(object):
                                        'splits.json or ignore if this is intentional.')
         return tr_keys, val_keys
 
+    def further_split(self, tr_keys: list[str]) -> list[list[str]]:
+        splits_file = join(self.preprocessed_dataset_folder_base, "splits_fl.json")
+        splits: list[str] = load_json(splits_file)
+        tr_key_set = set(tr_keys)
+        output = []
+        for split in splits:
+            split_set = set(split)
+            if len(split_tr := split_set & tr_key_set) < 10:
+                self.print_to_log_file(f"too few existing samples in artificial splits\n{split_set}\n{tr_key_set}")
+                raise ValueError("error in splits")
+            output.append(sorted(list(split_tr)))
+        return output
+
     def get_tr_and_val_datasets(self):
         # create dataset split
         tr_keys, val_keys = self.do_split()
+        tr_key_splits = self.further_split(tr_keys)
 
         # load the datasets for training and validation. Note that we always draw random samples so we really don't
         # care about distributing training cases across GPUs.
-        dataset_tr = self.dataset_class(self.preprocessed_dataset_folder, tr_keys,
+        dataset_tr = [self.dataset_class(self.preprocessed_dataset_folder, x,
                                         folder_with_segs_from_previous_stage=self.folder_with_segs_from_previous_stage)
+                      for x in tr_key_splits]
         dataset_val = self.dataset_class(self.preprocessed_dataset_folder, val_keys,
                                          folder_with_segs_from_previous_stage=self.folder_with_segs_from_previous_stage)
         return dataset_tr, dataset_val
@@ -662,13 +685,13 @@ class nnUNetTrainer(object):
 
         dataset_tr, dataset_val = self.get_tr_and_val_datasets()
 
-        dl_tr = nnUNetDataLoader(dataset_tr, self.batch_size,
-                                 initial_patch_size,
-                                 self.configuration_manager.patch_size,
-                                 self.label_manager,
-                                 oversample_foreground_percent=self.oversample_foreground_percent,
-                                 sampling_probabilities=None, pad_sides=None, transforms=tr_transforms,
-                                 probabilistic_oversampling=self.probabilistic_oversampling)
+        dl_tr = [nnUNetDataLoader(x, self.batch_size,
+                                  initial_patch_size,
+                                  self.configuration_manager.patch_size,
+                                  self.label_manager,
+                                  oversample_foreground_percent=self.oversample_foreground_percent,
+                                  sampling_probabilities=None, pad_sides=None, transforms=tr_transforms,
+                                  probabilistic_oversampling=self.probabilistic_oversampling) for x in dataset_tr]
         dl_val = nnUNetDataLoader(dataset_val, self.batch_size,
                                   self.configuration_manager.patch_size,
                                   self.configuration_manager.patch_size,
@@ -679,20 +702,20 @@ class nnUNetTrainer(object):
 
         allowed_num_processes = get_allowed_n_proc_DA()
         if allowed_num_processes == 0:
-            mt_gen_train = SingleThreadedAugmenter(dl_tr, None)
+            mt_gen_train = [SingleThreadedAugmenter(x, None) for x in dl_tr]
             mt_gen_val = SingleThreadedAugmenter(dl_val, None)
         else:
-            mt_gen_train = NonDetMultiThreadedAugmenter(data_loader=dl_tr, transform=None,
-                                                        num_processes=allowed_num_processes,
-                                                        num_cached=max(6, allowed_num_processes // 2), seeds=None,
-                                                        pin_memory=self.device.type == 'cuda', wait_time=0.002)
+            mt_gen_train = [NonDetMultiThreadedAugmenter(data_loader=x, transform=None,
+                                                         num_processes=allowed_num_processes,
+                                                         num_cached=max(6, allowed_num_processes // 2), seeds=None,
+                                                         pin_memory=self.device.type == 'cuda', wait_time=0.002) for x in dl_tr]
             mt_gen_val = NonDetMultiThreadedAugmenter(data_loader=dl_val,
                                                       transform=None, num_processes=max(1, allowed_num_processes // 2),
                                                       num_cached=max(3, allowed_num_processes // 4), seeds=None,
                                                       pin_memory=self.device.type == 'cuda',
                                                       wait_time=0.002)
         # # let's get this party started
-        _ = next(mt_gen_train)
+        _ = [next(x) for x in mt_gen_train]
         _ = next(mt_gen_val)
         return mt_gen_train, mt_gen_val
 
@@ -955,10 +978,10 @@ class nnUNetTrainer(object):
         with open(os.devnull, 'w') as f:
             sys.stdout = f
             if self.dataloader_train is not None and \
-                    isinstance(self.dataloader_train, (NonDetMultiThreadedAugmenter, MultiThreadedAugmenter)):
-                self.dataloader_train._finish()
+                    isinstance(self.dataloader_train[0], (NonDetMultiThreadedAugmenter, MultiThreadedAugmenter)):
+                _ = [x._finish() for x in self.dataloader_train]  # pyright: ignore[reportAttributeAccessIssue]
             if self.dataloader_val is not None and \
-                    isinstance(self.dataloader_train, (NonDetMultiThreadedAugmenter, MultiThreadedAugmenter)):
+                    isinstance(self.dataloader_val, (NonDetMultiThreadedAugmenter, MultiThreadedAugmenter)):
                 self.dataloader_val._finish()
             sys.stdout = old_stdout
 
@@ -1364,6 +1387,14 @@ class nnUNetTrainer(object):
         self.set_deep_supervision_enabled(True)
         compute_gaussian.cache_clear()
 
+    @staticmethod
+    def combine(original: dict[str, Tensor], updates: list[dict[str, Tensor]]) -> dict[str, Tensor]:
+        size = len(updates)
+        output = {}
+        for key in original:
+            output[key] = sum([x[key] for x in updates]) - original[key] * (size - 1)
+        return output
+
     def run_training(self):
         self.on_train_start()
 
@@ -1372,8 +1403,15 @@ class nnUNetTrainer(object):
 
             self.on_train_epoch_start()
             train_outputs = []
-            for batch_id in range(self.num_iterations_per_epoch):
-                train_outputs.append(self.train_step(next(self.dataloader_train)))
+            updates = []
+            original = deepcopy(self.network.state_dict())
+            for dataloader_train in self.dataloader_train:
+                for batch_id in range(self.num_iterations_per_epoch):
+                    train_outputs.append(self.train_step(next(dataloader_train)))
+                updates.append(deepcopy(self.network.state_dict()))
+                self.network.load_state_dict(original)
+            new_weights = self.combine(original, updates)
+            self.network.load_state_dict(new_weights)
             self.on_train_epoch_end(train_outputs)
 
             with torch.no_grad():
