@@ -13,10 +13,12 @@
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
 import os
+from pathlib import Path
 import shutil
 import threading
 import os.path
 from functools import lru_cache
+from time import time
 from typing import Union
 
 from batchgenerators.utilities.file_and_folder_operations import *
@@ -92,7 +94,7 @@ def create_lists_from_splitted_dataset_folder(folder: str, file_ending: str, ide
     params_list = [(folder, files, file_ending, f) for f in identifiers]
     with Pool(processes=num_processes) as pool:
         list_of_lists = pool.starmap(create_paths_fn, params_list)
-        
+
     return list_of_lists
 
 
@@ -112,6 +114,30 @@ def get_filenames_of_train_images_and_targets(raw_dataset_folder: str, dataset_j
         segs = [join(raw_dataset_folder, 'labelsTr', i + dataset_json['file_ending']) for i in identifiers]
         dataset = {i: {'images': im, 'label': se} for i, im, se in zip(identifiers, images, segs)}
     return dataset
+
+
+class WaitFile:
+    file: Path
+    file_time: float
+    max_wait: float
+    WAIT_TIME: float = 0.2
+
+    def __init__(self, file: Path, max_wait: float = 1E3) -> None:
+        self.file = file
+        self.max_wait = max_wait
+        self.file_time = file.stat().st_mtime
+
+    def reset(self):
+        self.file_time = self.file.stat().st_mtime
+
+    def wait(self) -> float:
+        time_limit = time() + self.max_wait
+        while True:
+            if (new_time := self.file.stat().st_mtime) > self.file_time:
+                self.file_time = new_time
+                return new_time
+            if (new_time := time()) > time_limit:
+                raise TimeoutError(f'[error] fl client timeout waiting for {self.file}')
 
 
 if __name__ == '__main__':
