@@ -12,14 +12,17 @@
 #    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 #    See the License for the specific language governing permissions and
 #    limitations under the License.
+from enum import Enum
 import os
 from pathlib import Path
 import shutil
 import threading
 import os.path
 from functools import lru_cache
-from time import time
+from time import sleep, time
 from typing import Union
+
+import torch
 
 from batchgenerators.utilities.file_and_folder_operations import *
 import numpy as np
@@ -124,6 +127,8 @@ class WaitFile:
 
     def __init__(self, file: Path, max_wait: float = 1E3) -> None:
         self.file = file
+        if not file.exists():
+            file.touch()
         self.max_wait = max_wait
         self.file_time = file.stat().st_mtime
 
@@ -138,6 +143,82 @@ class WaitFile:
                 return new_time
             if (new_time := time()) > time_limit:
                 raise TimeoutError(f'[error] fl client timeout waiting for {self.file}')
+            sleep(self.WAIT_TIME)
+
+    def read(self) -> dict[str, torch.Tensor]:
+        return torch.load(self.file)
+
+    def write(self, weights: dict[str, torch.Tensor]):
+        return torch.save(weights, self.file)
+
+
+class FileStatus(Enum):
+    normal = 0
+    reading = 1
+    writing = 2
+
+
+class Sentinel:
+    WAIT_TIME: float = 0.2
+    def __init__(self, file: Path, max_wait: float = 1000) -> None:
+        self.sen_file: Path = file.with_name(file.stem + '-sen.txt')
+        self.max_wait: float = max_wait
+        if not self.sen_file.exists():
+            _ = self.sen_file.write_text(str(FileStatus.normal.value))
+
+    def status(self) -> FileStatus:
+        return FileStatus(int(self.sen_file.read_text()))
+
+    def update(self, status: FileStatus):
+        _ = self.sen_file.write_text(str(status.value))
+
+    def unlock(self):
+        self.update(FileStatus.normal)
+
+    def wait_read(self):
+        time_limit = time() + self.max_wait
+        while True:
+            status = FileStatus(int(self.sen_file.read_text()))
+            if status != FileStatus.writing:
+                self.update(FileStatus.reading)
+                return
+            if time() > time_limit:
+                raise TimeoutError(f'[error] fl client timeout waiting to read on sentinel {self.sen_file}')
+            sleep(self.WAIT_TIME)
+
+    def wait_write(self):
+        time_limit = time() + self.max_wait
+        while True:
+            status = FileStatus(int(self.sen_file.read_text()))
+            if status == FileStatus.normal:
+                self.update(FileStatus.writing)
+                return
+            if time() > time_limit:
+                raise TimeoutError(f'[error] fl client timeout waiting to read on sentinel {self.sen_file}')
+            sleep(self.WAIT_TIME)
+
+
+class DiffReader:
+    sentinel: Sentinel
+    file: WaitFile
+
+    def __init__(self, file: Path, max_wait: float = 1E3) -> None:
+        self.file = WaitFile(file, max_wait)
+        self.sentinel = Sentinel(file)
+
+    def read(self) -> dict[str, torch.Tensor]:
+        _ = self.file.wait()
+        self.sentinel.wait_read()
+        res = self.file.read()
+        self.sentinel.unlock()
+        return res
+
+
+class DiffWriter(DiffReader):
+    def write(self, state_dict: dict[str, torch.Tensor]):
+        self.sentinel.wait_write()
+        self.file.write(state_dict)
+        self.sentinel.unlock()
 
 
 if __name__ == '__main__':

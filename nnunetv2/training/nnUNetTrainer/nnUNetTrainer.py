@@ -1,6 +1,7 @@
 import inspect
 import multiprocessing
 import os
+from pathlib import Path
 import shutil
 import sys
 import warnings
@@ -36,7 +37,7 @@ from batchgeneratorsv2.transforms.utils.pseudo2d import Convert3DTo2DTransform, 
 from batchgeneratorsv2.transforms.utils.random import RandomTransform
 from batchgeneratorsv2.transforms.utils.remove_label import RemoveLabelTansform
 from batchgeneratorsv2.transforms.utils.seg_to_regions import ConvertSegmentationToRegionsTransform
-from torch import autocast, nn
+from torch import Tensor, autocast, nn
 from torch import distributed as dist
 from torch._dynamo import OptimizedModule
 from torch.cuda import device_count
@@ -65,7 +66,20 @@ from nnunetv2.utilities.get_network_from_plans import get_network_from_plans
 from nnunetv2.utilities.helpers import empty_cache, dummy_context
 from nnunetv2.utilities.label_handling.label_handling import convert_labelmap_to_one_hot, determine_num_input_channels
 from nnunetv2.utilities.plans_handling.plans_handler import PlansManager
-from nnunetv2.utilities.utils import copy_no_perms
+from nnunetv2.utilities.utils import DiffReader, DiffWriter, copy_no_perms
+
+
+StateDict = dict[str, Tensor]
+
+
+def add(x0: StateDict, x1: StateDict) -> StateDict:
+    return {k: v + x1[k] for k, v in x0.items()}
+
+def minus(x0: StateDict, x1: StateDict) -> StateDict:
+    return {k: v - x1[k] for k, v in x0.items()}
+
+def multiply(x0: StateDict, y: float) -> StateDict:
+    return {k: v * y for k, v in x0.items()}
 
 
 class nnUNetTrainer(object):
@@ -163,7 +177,10 @@ class nnUNetTrainer(object):
         # needed for predictions. We do sigmoid in case of (overlapping) regions
 
         self.num_input_channels = None  # -> self.initialize()
-        self.network = None  # -> self.build_network_architecture()
+        self.network: nn.Module = None  # -> self.build_network_architecture()  # pyright: ignore[reportAttributeAccessIssue]
+        self.prev_weights: dict[str, Tensor] = None  # pyright: ignore[reportAttributeAccessIssue]
+        self.out_file: DiffWriter = DiffWriter(Path(os.environ['nnUNet_flout']))
+        self.in_file: DiffReader = DiffReader(Path(os.environ['nnUNet_flin']))
         self.optimizer = self.lr_scheduler = None  # -> self.initialize
         self.grad_scaler = GradScaler("cuda") if self.device.type == 'cuda' else None
         self.loss = None  # -> self.initialize
@@ -968,6 +985,7 @@ class nnUNetTrainer(object):
     def on_train_epoch_start(self):
         self.network.train()
         self.lr_scheduler.step(self.current_epoch)
+        self.prev_weights = deepcopy(self.network.state_dict())
         self.print_to_log_file('')
         self.print_to_log_file(f'Epoch {self.current_epoch}')
         self.print_to_log_file(
@@ -1009,6 +1027,8 @@ class nnUNetTrainer(object):
 
     def on_train_epoch_end(self, train_outputs: List[dict]):
         outputs = collate_outputs(train_outputs)
+        self_diff = minus(self.network.state_dict(), self.prev_weights)
+        self.out_file.write(self_diff)
 
         if self.is_ddp:
             losses_tr = [None for _ in range(dist.get_world_size())]
@@ -1017,6 +1037,9 @@ class nnUNetTrainer(object):
         else:
             loss_here = np.mean(outputs['loss'])
 
+        remote_diff = self.in_file.read()
+        final_dict = add(multiply(add(self_diff, remote_diff), 0.5), self.prev_weights)
+        _ = self.network.load_state_dict(final_dict)
         self.logger.log('train_losses', loss_here, self.current_epoch)
 
     def on_validation_epoch_start(self):
