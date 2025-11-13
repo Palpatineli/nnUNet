@@ -1025,10 +1025,10 @@ class nnUNetTrainer(object):
             self.optimizer.step()
         return {'loss': l.detach().cpu().numpy()}
 
-    def on_train_epoch_end(self, train_outputs: List[dict]):
+    def on_train_epoch_end(self, train_outputs: List[dict], epoch: int):
         outputs = collate_outputs(train_outputs)
         self_diff = minus(self.network.state_dict(), self.prev_weights)
-        self.out_file.write(self_diff)
+        self.out_file.write(epoch, self_diff)
 
         if self.is_ddp:
             losses_tr = [None for _ in range(dist.get_world_size())]
@@ -1037,7 +1037,7 @@ class nnUNetTrainer(object):
         else:
             loss_here = np.mean(outputs['loss'])
 
-        remote_diff = self.in_file.read()
+        remote_diff = self.in_file.read(epoch)
         final_dict = add(multiply(add(self_diff, remote_diff), 0.5), self.prev_weights)
         _ = self.network.load_state_dict(final_dict)
         self.logger.log('train_losses', loss_here, self.current_epoch)
@@ -1397,7 +1397,7 @@ class nnUNetTrainer(object):
             train_outputs = []
             for batch_id in range(self.num_iterations_per_epoch):
                 train_outputs.append(self.train_step(next(self.dataloader_train)))
-            self.on_train_epoch_end(train_outputs)
+            self.on_train_epoch_end(train_outputs, epoch)
 
             with torch.no_grad():
                 self.on_validation_epoch_start()

@@ -152,48 +152,30 @@ class WaitFile:
         return torch.save(weights, self.file)
 
 
-class FileStatus(Enum):
-    normal = 0
-    reading = 1
-    writing = 2
-
-
 class Sentinel:
+    """write the current done epoch number to sentinel file. -1 for just stared, -2 for still writing, -3 for ready for update"""
     WAIT_TIME: float = 0.2
     def __init__(self, file: Path, max_wait: float = 1000) -> None:
         self.sen_file: Path = file.with_name(file.stem + '-sen.txt')
         self.max_wait: float = max_wait
         if not self.sen_file.exists():
-            _ = self.sen_file.write_text(str(FileStatus.normal.value))
+            _ = self.sen_file.write_text(str(-1))
 
-    def status(self) -> FileStatus:
+    @property
+    def epoch(self) -> int:
         try:
-            code = int(self.sen_file.read_text())
+            return int(self.sen_file.read_text())
         except ValueError:
-            return FileStatus.writing
-        return FileStatus(code)
+            return -2
 
-    def update(self, status: FileStatus):
-        _ = self.sen_file.write_text(str(status.value))
+    @epoch.setter
+    def epoch(self, epoch: int) -> None:
+        _ = self.sen_file.write_text(str(epoch))
 
-    def unlock(self):
-        self.update(FileStatus.normal)
-
-    def wait_read(self):
+    def wait(self, epoch: int):
         time_limit = time() + self.max_wait
         while True:
-            if self.status() != FileStatus.writing:
-                self.update(FileStatus.reading)
-                return
-            if time() > time_limit:
-                raise TimeoutError(f'[error] fl client timeout waiting to read on sentinel {self.sen_file}')
-            sleep(self.WAIT_TIME)
-
-    def wait_write(self):
-        time_limit = time() + self.max_wait
-        while True:
-            if self.status() == FileStatus.normal:
-                self.update(FileStatus.writing)
+            if self.epoch == epoch:
                 return
             if time() > time_limit:
                 raise TimeoutError(f'[error] fl client timeout waiting to read on sentinel {self.sen_file}')
@@ -208,19 +190,18 @@ class DiffReader:
         self.file = WaitFile(file, max_wait)
         self.sentinel = Sentinel(file)
 
-    def read(self) -> dict[str, torch.Tensor]:
-        _ = self.file.wait()
-        self.sentinel.wait_read()
+    def read(self, epoch: int) -> dict[str, torch.Tensor]:
+        self.sentinel.wait(epoch)
         res = self.file.read()
-        self.sentinel.unlock()
+        self.sentinel.epoch = -1
         return res
 
 
 class DiffWriter(DiffReader):
-    def write(self, state_dict: dict[str, torch.Tensor]):
-        self.sentinel.wait_write()
+    def write(self, epoch: int, state_dict: dict[str, torch.Tensor]):
+        self.sentinel.wait(-1)
         self.file.write(state_dict)
-        self.sentinel.unlock()
+        self.sentinel.epoch = epoch
 
 
 if __name__ == '__main__':

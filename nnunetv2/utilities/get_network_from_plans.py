@@ -1,9 +1,24 @@
 import pydoc
 import warnings
 from typing import Union
+import random
+import numpy as np
+import torch
 
 from nnunetv2.utilities.find_class_by_name import recursive_find_python_class
 from batchgenerators.utilities.file_and_folder_operations import join
+
+
+SEED = 12345
+
+
+def manual_seed(seed: int):
+    _ = torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed) # if using multiple GPUs
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True # For CuDNN operations
+    torch.backends.cudnn.benchmark = False # Can impact perfor
 
 
 def get_network_from_plans(arch_class_name, arch_kwargs, arch_kwargs_req_import, input_channels, output_channels,
@@ -38,6 +53,7 @@ def get_network_from_plans(arch_class_name, arch_kwargs, arch_kwargs_req_import,
     )
 
     if hasattr(network, 'initialize') and allow_init:
+        manual_seed(SEED)
         network.apply(network.initialize)
 
     return network
