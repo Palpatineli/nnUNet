@@ -167,7 +167,11 @@ class Sentinel:
             _ = self.sen_file.write_text(str(FileStatus.normal.value))
 
     def status(self) -> FileStatus:
-        return FileStatus(int(self.sen_file.read_text()))
+        try:
+            code = int(self.sen_file.read_text())
+        except ValueError:
+            return FileStatus.writing
+        return FileStatus(code)
 
     def update(self, status: FileStatus):
         _ = self.sen_file.write_text(str(status.value))
@@ -178,8 +182,7 @@ class Sentinel:
     def wait_read(self):
         time_limit = time() + self.max_wait
         while True:
-            status = FileStatus(int(self.sen_file.read_text()))
-            if status != FileStatus.writing:
+            if self.status() != FileStatus.writing:
                 self.update(FileStatus.reading)
                 return
             if time() > time_limit:
@@ -189,8 +192,7 @@ class Sentinel:
     def wait_write(self):
         time_limit = time() + self.max_wait
         while True:
-            status = FileStatus(int(self.sen_file.read_text()))
-            if status == FileStatus.normal:
+            if self.status() == FileStatus.normal:
                 self.update(FileStatus.writing)
                 return
             if time() > time_limit:
