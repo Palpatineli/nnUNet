@@ -1027,8 +1027,8 @@ class nnUNetTrainer(object):
 
     def on_train_epoch_end(self, train_outputs: List[dict], epoch: int):
         outputs = collate_outputs(train_outputs)
-        self_diff = minus(self.network.state_dict(), self.prev_weights)
-        self.out_file.write(epoch, self_diff)
+        self_weight = self.network.state_dict()
+        self.out_file.write(epoch, self_weight)
 
         if self.is_ddp:
             losses_tr = [None for _ in range(dist.get_world_size())]
@@ -1037,8 +1037,8 @@ class nnUNetTrainer(object):
         else:
             loss_here = np.mean(outputs['loss'])
 
-        remote_diff = self.in_file.read(epoch)
-        final_dict = add(multiply(add(self_diff, remote_diff), 0.5), self.prev_weights)
+        remote_weight = self.in_file.read(epoch)
+        final_dict = multiply(add(self_weight, remote_weight), 0.5)
         _ = self.network.load_state_dict(final_dict)
         self.logger.log('train_losses', loss_here, self.current_epoch)
 
