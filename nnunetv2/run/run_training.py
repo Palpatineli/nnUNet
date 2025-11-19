@@ -145,7 +145,8 @@ def run_training(dataset_name_or_id: Union[str, int],
                  only_run_validation: bool = False,
                  disable_checkpointing: bool = False,
                  val_with_best: bool = False,
-                 device: torch.device = torch.device('cuda')):
+                 device: torch.device = torch.device('cuda'),
+                 return_trainer: bool = False):
     if plans_identifier == 'nnUNetPlans':
         print("\n############################\n"
               "INFO: You are using the old nnU-Net default plans. We have updated our recommendations. "
@@ -202,6 +203,9 @@ def run_training(dataset_name_or_id: Union[str, int],
         if torch.cuda.is_available():
             cudnn.deterministic = False
             cudnn.benchmark = True
+
+        if return_trainer:
+            return nnunet_trainer
 
         if not only_run_validation:
             nnunet_trainer.run_training()
