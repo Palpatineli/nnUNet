@@ -336,7 +336,10 @@ class DefaultPreprocessor(object):
     def _normalize(self, data: np.ndarray, seg: np.ndarray, configuration_manager: ConfigurationManager,
                    foreground_intensity_properties_per_channel: dict) -> np.ndarray:
         for c in range(data.shape[0]):
-            scheme = configuration_manager.normalization_schemes[c]
+            try:
+                scheme = configuration_manager.normalization_schemes[c]
+            except IndexError as e:
+                raise IndexError(f"bad channel: {c}", e)
             normalizer_class = recursive_find_python_class(join(nnunetv2.__path__[0], "preprocessing", "normalization"),
                                                            scheme,
                                                            'nnunetv2.preprocessing.normalization')

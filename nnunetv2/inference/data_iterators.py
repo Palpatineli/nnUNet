@@ -28,12 +28,15 @@ def preprocess_fromfiles_save_to_queue(list_of_lists: List[List[str]],
         label_manager = plans_manager.get_label_manager(dataset_json)
         preprocessor = configuration_manager.preprocessor_class(verbose=verbose)
         for idx in range(len(list_of_lists)):
-            data, seg, data_properties = preprocessor.run_case(list_of_lists[idx],
-                                                               list_of_segs_from_prev_stage_files[
-                                                                   idx] if list_of_segs_from_prev_stage_files is not None else None,
-                                                               plans_manager,
-                                                               configuration_manager,
-                                                               dataset_json)
+            try:
+                data, seg, data_properties = preprocessor.run_case(list_of_lists[idx],
+                                                                   list_of_segs_from_prev_stage_files[
+                                                                       idx] if list_of_segs_from_prev_stage_files is not None else None,
+                                                                   plans_manager,
+                                                                   configuration_manager,
+                                                                   dataset_json)
+            except IndexError as e:
+                raise IndexError(f"idx: {idx}, {output_filenames_truncated[idx]}", e)
             if list_of_segs_from_prev_stage_files is not None and list_of_segs_from_prev_stage_files[idx] is not None:
                 seg_onehot = convert_labelmap_to_one_hot(seg[0], label_manager.foreground_labels, data.dtype)
                 data = np.vstack((data, seg_onehot))
