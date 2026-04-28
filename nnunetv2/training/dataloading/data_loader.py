@@ -100,11 +100,11 @@ class nnUNetDataLoader(DataLoader):
             # print('I want a random location')
         else:
             if not force_fg and self.has_ignore:
-                selected_class = self.annotated_classes_key
-                if len(class_locations[selected_class]) == 0:
-                    # no annotated pixels in this case. Not good. But we can hardly skip it here
-                    warnings.warn('Warning! No annotated pixels in image!')
-                    selected_class = None
+                # selected_class = self.annotated_classes_key
+                # if len(class_locations[selected_class]) == 0:
+                #    # no annotated pixels in this case. Not good. But we can hardly skip it here
+                #    warnings.warn('Warning! No annotated pixels in image!')
+                selected_class = None
             elif force_fg:
                 assert class_locations is not None, 'if force_fg is set class_locations cannot be None'
                 if overwrite_class is not None:
