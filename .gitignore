@@ -118,3 +118,6 @@ ENV/
 
 CLAUDE.md
 AGENTS.md
+
+# Synthetic MedNeXt integration-test artifacts
+nnunetv2/tests/.mednext-runtime/
