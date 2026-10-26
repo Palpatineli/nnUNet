@@ -50,6 +50,15 @@ class nnUNetTrainerMedNeXt(nnUNetTrainer):
         return super()._build_loss()
 
 
+class nnUNetTrainerMedNeXtNoMirroring(nnUNetTrainerMedNeXt):
+    """MedNeXt AdamW defaults with mirror augmentation and inference mirroring disabled."""
+    def configure_rotation_dummyDA_mirroring_and_inital_patch_size(self):
+        rotation_for_DA, do_dummy_2d_data_aug, initial_patch_size, _ = \
+            super().configure_rotation_dummyDA_mirroring_and_inital_patch_size()
+        self.inference_allowed_mirroring_axes = None
+        return rotation_for_DA, do_dummy_2d_data_aug, initial_patch_size, None
+
+
 class nnUNetTrainerMedNeXtAdamW(nnUNetTrainerMedNeXt):
     """MedNeXt AdamW defaults, with all other behavior inherited from SGD."""
     default_initial_lr = 1e-3
@@ -58,3 +67,12 @@ class nnUNetTrainerMedNeXtAdamW(nnUNetTrainerMedNeXt):
         optimizer = torch.optim.AdamW(self.network.parameters(), lr=self.initial_lr,
                                       weight_decay=self.weight_decay, eps=1e-4)
         return optimizer, PolyLRScheduler(optimizer, self.initial_lr, self.num_epochs, self.lr_exponent)
+
+
+class nnUNetTrainerMedNeXtAdamWNoMirroring(nnUNetTrainerMedNeXtAdamW):
+    """MedNeXt AdamW defaults with mirror augmentation and inference mirroring disabled."""
+    def configure_rotation_dummyDA_mirroring_and_inital_patch_size(self):
+        rotation_for_DA, do_dummy_2d_data_aug, initial_patch_size, _ = \
+            super().configure_rotation_dummyDA_mirroring_and_inital_patch_size()
+        self.inference_allowed_mirroring_axes = None
+        return rotation_for_DA, do_dummy_2d_data_aug, initial_patch_size, None
