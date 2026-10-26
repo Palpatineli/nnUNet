@@ -121,3 +121,4 @@ AGENTS.md
 
 # Synthetic MedNeXt integration-test artifacts
 nnunetv2/tests/.mednext-runtime/
+nnunetv2/tests/.tversky-runtime/
