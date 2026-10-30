@@ -29,7 +29,7 @@ nnUNetv2_plan_and_preprocess -d DATASET_ID -pl MedNeXtPlanner -c 3d_fullres
 
 The default plans identifier is `MedNeXtPlans`. The planner accepts the normal `-gpu_memory_target`, `-overwrite_target_spacing`, and `-overwrite_plans_name` arguments. Target spacing, normalization, resampling, transpose, minimum batch size, dataset batch-coverage cap, and minimum bottleneck edge length follow vanilla planner defaults. It emits no 2D, low-resolution, or cascade configuration. Normal preprocessing skips missing configurations if invoked with its default configuration list.
 
-The default capacity is base width 32, doubled per resolution level and capped at 320 channels, two blocks per encoder and decoder stage, and expansion ratio four. Stage count, anisotropic strides, patch size, and batch size adapt to spacing, median shape, and requested memory. Capacity is not automatically reduced apart from the change in number of spatial levels.
+The default encoder recipe is widths `[32, 64, 128, 384, 512, 512]`, block counts `[2, 3, 4, 6, 6, 6]`, and expansion ratios `[4, 4, 4, 8, 8, 8]`. Shorter networks use the prefix; further stages repeat the last value. Decoder stages have two blocks and mirror the destination encoder expansion. Checkpointing is enabled. With six stages, one input channel and five outputs, this has approximately 96.67M parameters, compared with 101.68M for the reference ResEncM plan; parameter count is not a planning target. Stage count, anisotropic strides, patch size, and batch size adapt to spacing, median shape, and requested memory. The memory model remains provisional and does not account for checkpointing savings; measure on the training GPU before relying on its estimates.
 
 The planner uses a provisional analytical memory model: convolution-output counts include expanded activations, resampling projections, and segmentation heads; parameter storage allows for AdamW states and optimizer temporaries. It reserves 20% of the target budget. These coefficients are uncalibrated and do not guarantee that a plan fits a particular accelerator. Checkpointing receives no assumed memory discount. The resolved estimate and coefficients are recorded in each configuration's `memory_estimate`.
 
@@ -86,7 +86,7 @@ All resolved settings are stored under `configurations.3d_fullres.architecture.a
 | `do_res` | Identity residuals in ordinary blocks; true |
 | `do_res_up_down` | Projected residuals in resampling blocks; true |
 | `drop_path_rate` | Per-block residual DropPath probability; zero |
-| `outside_block_checkpointing` | Non-reentrant activation checkpointing; false |
+| `outside_block_checkpointing` | Non-reentrant activation checkpointing; true in planner defaults |
 
 Auxiliary heads exist at decoder resolutions, never the bottleneck. GroupNorm uses one group per channel. GRN reduces over spatial dimensions in FP32 under mixed precision. Additive skip fusion preserves the MedNeXt structure. Transposed depthwise convolutions and their residual projections respect anisotropic strides.
 

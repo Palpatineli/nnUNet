@@ -48,23 +48,24 @@ class MedNeXtPlanner(ExperimentPlanner):
 
     def _architecture(self, strides, kernels):
         n_stages = len(strides)
+        def recipe(values):
+            return [values[min(i, len(values) - 1)] for i in range(n_stages)]
         kwargs = {
             'n_stages': n_stages,
-            'features_per_stage': [min(self.UNet_base_num_features * 2 ** i,
-                                       self.UNet_max_features_3d) for i in range(n_stages)],
+            'features_per_stage': recipe([32, 64, 128, 384, 512, 512]),
             'conv_op': 'torch.nn.Conv3d',
             'kernel_sizes': [[self.kernel_size if k > 1 else 1 for k in stage] for stage in kernels],
             'strides': [list(stage) for stage in strides],
-            'n_conv_per_stage': [2] * n_stages,
+            'n_conv_per_stage': recipe([2, 3, 4, 6, 6, 6]),
             'n_conv_per_stage_decoder': [2] * (n_stages - 1),
-            'expansion_ratio': [4] * n_stages,
+            'expansion_ratio': recipe([4, 4, 4, 8, 8, 8]),
             'expansion_ratio_decoder': None,
             'do_res': True,
             'do_res_up_down': True,
             'norm_type': 'group',
             'grn': True,
             'drop_path_rate': 0.,
-            'outside_block_checkpointing': False,
+            'outside_block_checkpointing': True,
         }
         kwargs.update(deepcopy(self.architecture_overrides))
         return {'network_class_name': MedNeXt.__module__ + '.MedNeXt',

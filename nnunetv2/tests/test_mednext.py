@@ -199,8 +199,11 @@ def test_planner_budget_capacity_and_spacing(dataset):
     assert low['batch_size'] >= 2
     for plan in (high, low):
         kwargs = plan['architecture']['arch_kwargs']
-        assert kwargs['features_per_stage'] == [min(32 * 2 ** i, 320) for i in range(kwargs['n_stages'])]
-        assert kwargs['n_conv_per_stage'] == [2] * kwargs['n_stages']
+        for key, recipe in [('features_per_stage', [32, 64, 128, 384, 512, 512]),
+                            ('n_conv_per_stage', [2, 3, 4, 6, 6, 6]),
+                            ('expansion_ratio', [4, 4, 4, 8, 8, 8])]:
+            assert kwargs[key] == [recipe[min(i, 5)] for i in range(kwargs['n_stages'])]
+        assert kwargs['outside_block_checkpointing']
         assert plan['memory_estimate']['estimated_training_bytes'] <= (
             plan['memory_estimate']['gpu_memory_target_in_gb'] * 1024 ** 3 * 0.8)
     planner = MedNeXtPlanner(name, overwrite_target_spacing=[2., 0.8, 0.8], kernel_size=5)
