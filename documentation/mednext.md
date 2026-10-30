@@ -1,6 +1,6 @@
 # MedNeXt with nnU-Net v2
 
-`MedNeXtPlanner` creates a native `3d_fullres` configuration. `nnUNetTrainerMedNeXt` uses vanilla SGD; `nnUNetTrainerMedNeXtAdamW` inherits that trainer and switches to the MedNeXt AdamW recipe. Both use the same plans and ordinary nnU-Net training and inference commands.
+`MedNeXtPlannerM` and `MedNeXtPlannerL` create a native `3d_fullres` configuration. `nnUNetTrainerMedNeXt` uses vanilla SGD; `nnUNetTrainerMedNeXtAdamW` inherits that trainer and switches to the MedNeXt AdamW recipe. Both use the same plans and ordinary nnU-Net training and inference commands.
 
 ## Install the source implementations
 
@@ -24,12 +24,12 @@ Old experimental MedNeXt plans and checkpoints are not compatible with the repai
 With the standard nnU-Net environment paths configured:
 
 ```bash
-nnUNetv2_plan_and_preprocess -d DATASET_ID -pl MedNeXtPlanner -c 3d_fullres
+nnUNetv2_plan_and_preprocess -d DATASET_ID -pl MedNeXtPlannerM -c 3d_fullres
 ```
 
-The default plans identifier is `MedNeXtPlans`. The planner accepts the normal `-gpu_memory_target`, `-overwrite_target_spacing`, and `-overwrite_plans_name` arguments. Target spacing, normalization, resampling, transpose, minimum batch size, dataset batch-coverage cap, and minimum bottleneck edge length follow vanilla planner defaults. It emits no 2D, low-resolution, or cascade configuration. Normal preprocessing skips missing configurations if invoked with its default configuration list.
+The default plans identifier is `MedNeXtMPlans`. The planner accepts the normal `-gpu_memory_target`, `-overwrite_target_spacing`, and `-overwrite_plans_name` arguments. Target spacing, normalization, resampling, transpose, minimum batch size, dataset batch-coverage cap, and minimum bottleneck edge length follow vanilla planner defaults. It emits no 2D, low-resolution, or cascade configuration. Normal preprocessing skips missing configurations if invoked with its default configuration list.
 
-The default encoder recipe is widths `[32, 64, 128, 384, 512, 512]`, block counts `[2, 3, 4, 6, 6, 6]`, and expansion ratios `[4, 4, 4, 8, 8, 8]`. Shorter networks use the prefix; further stages repeat the last value. Decoder stages have two blocks and mirror the destination encoder expansion. Checkpointing is enabled. With six stages, one input channel and five outputs, this has approximately 96.67M parameters, compared with 101.68M for the reference ResEncM plan; parameter count is not a planning target. Stage count, anisotropic strides, patch size, and batch size adapt to spacing, median shape, and requested memory. The memory model remains provisional and does not account for checkpointing savings; measure on the training GPU before relying on its estimates.
+The default encoder recipe is widths `[16, 32, 128, 384, 512, 512]`, block counts `[1, 2, 4, 6, 6, 6]`, and expansion ratios `[2, 2, 4, 8, 8, 8]`. Shorter networks use the prefix; further stages repeat the last value. Decoder stages have one block at the two highest resolutions and two elsewhere, and mirror the destination encoder expansion. Checkpointing is enabled. With six stages, one input channel and five outputs, this has approximately 96.35M parameters, compared with 101.68M for the reference ResEncM plan; parameter count is not a planning target. Stage count, anisotropic strides, patch size, and batch size adapt to spacing, median shape, and requested memory. The memory model remains provisional and uses a first-pass checkpoint-aware peak model; measure on the training GPU before relying on its estimates.
 
 The planner uses a provisional analytical memory model: convolution-output counts include expanded activations, resampling projections, and segmentation heads; parameter storage allows for AdamW states and optimizer temporaries. It reserves 20% of the target budget. These coefficients are uncalibrated and do not guarantee that a plan fits a particular accelerator. Checkpointing receives no assumed memory discount. The resolved estimate and coefficients are recorded in each configuration's `memory_estimate`.
 
@@ -38,13 +38,13 @@ The planner uses a provisional analytical memory model: convolution-output count
 Vanilla SGD:
 
 ```bash
-nnUNetv2_train DATASET_ID 3d_fullres FOLD -p MedNeXtPlans -tr nnUNetTrainerMedNeXt
+nnUNetv2_train DATASET_ID 3d_fullres FOLD -p MedNeXtMPlans -tr nnUNetTrainerMedNeXt
 ```
 
 MedNeXt AdamW:
 
 ```bash
-nnUNetv2_train DATASET_ID 3d_fullres FOLD -p MedNeXtPlans -tr nnUNetTrainerMedNeXtAdamW
+nnUNetv2_train DATASET_ID 3d_fullres FOLD -p MedNeXtMPlans -tr nnUNetTrainerMedNeXtAdamW
 ```
 
 | Setting | SGD trainer | AdamW trainer |
@@ -62,7 +62,7 @@ Prediction uses the trainer recorded in the checkpoint:
 
 ```bash
 nnUNetv2_predict -i INPUT_FOLDER -o OUTPUT_FOLDER -d DATASET_ID -c 3d_fullres \
-  -p MedNeXtPlans -tr nnUNetTrainerMedNeXtAdamW -f FOLD
+  -p MedNeXtMPlans -tr nnUNetTrainerMedNeXtAdamW -f FOLD
 ```
 
 Use `nnUNetTrainerMedNeXt` instead when predicting an SGD run. Standard prediction reconstructs the complete model from plans, loads all registered parameters, and disables auxiliary outputs.
@@ -93,9 +93,9 @@ Auxiliary heads exist at decoder resolutions, never the bottleneck. GroupNorm us
 To change capacity or kernels before memory planning, use the planner's Python interface (or a small planner subclass for CLI discovery):
 
 ```python
-from nnunetv2.experiment_planning.experiment_planners.mednext import MedNeXtPlanner
+from nnunetv2.experiment_planning.experiment_planners.mednext import MedNeXtPlannerM
 
-planner = MedNeXtPlanner(
+planner = MedNeXtPlannerM(
     DATASET_ID,
     plans_name='MedNeXtCustomPlans',
     gpu_memory_target_in_gb=24,
@@ -123,7 +123,7 @@ On a machine with an accessible CUDA or ROCm device:
 
 ```bash
 python -m nnunetv2.experiment_planning.profile_mednext \
-  --plans "$nnUNet_preprocessed/DatasetXXX_NAME/MedNeXtPlans.json" \
+  --plans "$nnUNet_preprocessed/DatasetXXX_NAME/MedNeXtMPlans.json" \
   --optimizer adamw --warmup 3 --steps 3 --output mednext-memory-adamw.json
 ```
 
@@ -148,3 +148,11 @@ python -m pytest nnunetv2/tests/test_mednext.py \
 The checks cover module registration, anisotropic and odd shapes, GRN, gradients, checkpointing with DropPath, compiled graph capture using the eager backend, feature-map counts against convolution execution, planning, preprocessing, both optimizer recipes, checkpoint resumption, and standard sliding-window prediction. Eager-backend graph capture does not validate GPU Inductor kernels or distributed execution.
 
 The development PyTorch build is `2.12.0+rocm7.14.0`; this session exposes neither `/dev/kfd` nor a GPU through PyTorch. Accelerator memory profiling and CUDA/ROCm kernel testing require a session with device access.
+
+### First-pass checkpoint memory estimate
+
+The `uncalibrated_checkpoint_peak_v2` estimator counts retained block inputs and skip/head features at four bytes per element, plus the largest single block convolution-output volume at twelve bytes per element for recomputation and backward temporaries. Parameter/gradient/optimizer allowance remains 24 bytes per parameter; the budget retains a 20% safety margin. Non-checkpointed networks retain the cumulative-output estimate. These are provisional mixed-precision allowances, not exact tensor-liveness accounting or a hardware calibration. Backend workspaces and compilation can change actual peaks. Plans record the method and `calibrated: false`; profile complete training steps on the target hardware before increasing the budget.
+
+### M and L planner presets
+
+Use `-pl MedNeXtPlannerM` for the reduced high-resolution recipe (`MedNeXtMPlans`), or `-pl MedNeXtPlannerL` for the original larger recipe (`MedNeXtLPlans`). Both default to the nominal 8 GB target and use the same checkpoint-aware estimator. L uses widths `[32,64,128,384,512,512]`, encoder depths `[2,3,4,6,6,6]`, expansion `[4,4,4,8,8,8]`, and two blocks at every decoder stage. M uses the reduced recipe documented above. These names distinguish activation cost; their six-stage parameter counts remain similar. Trainer classes are shared; select the corresponding plans with `-p MedNeXtMPlans` or `-p MedNeXtLPlans`. Explicit plans-name and architecture overrides remain supported.

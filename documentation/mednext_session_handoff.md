@@ -11,7 +11,7 @@ Usage, configuration semantics, and profiling commands are in `documentation/med
 ## Implementation status
 
 - Architecture uses registered encoder/decoder modules, validated resolution levels, independent channel widths and anisotropic strides, projected residual resampling, propagated GRN, selectable normalization, optional DropPath and non-reentrant checkpointing.
-- Full-resolution planner reuses vanilla spacing, topology, normalization, resampling, and plan assembly. It serializes all architecture options and a provisional analytical memory estimate. Its default plans name is `MedNeXtPlans`.
+- Full-resolution planner reuses vanilla spacing, topology, normalization, resampling, and plan assembly. It serializes all architecture options and a provisional analytical memory estimate. Its default plans name is `MedNeXtMPlans` (M) or `MedNeXtLPlans` (L).
 - Trainer names are `nnUNetTrainerMedNeXt` and `nnUNetTrainerMedNeXtAdamW`, both in `nnunetv2/training/nnUNetTrainer/nnUNetTrainerMedNeXt.py`. The latter inherits from the SGD trainer. The planner omits global `initial_lr`, allowing trainer-specific defaults; an explicit global value overrides either default.
 - Constructor `architecture_overrides` applies block/capacity options before memory planning; `kernel_size` adjusts default anisotropic kernels. Planner-controlled geometry cannot be overridden there. Direct geometry edits in plans require consistent shapes and patch divisibility, validated at network reconstruction. Direct capacity edits invalidate memory estimates and should be applied through replanning.
 - Added `nnunetv2/experiment_planning/profile_mednext.py` for synthetic FP16 CUDA/ROCm memory measurements with actual segmentation losses, warmup, optimizer state, and optional compilation/checkpointing. This is separate from segmentation-quality validation and never runs automatically during planning.
@@ -164,3 +164,5 @@ These steps have been carried out to the extent supported by local device access
 - PyTorch ROCm semantics: https://docs.pytorch.org/docs/2.14/notes/hip.html
 
 The grill-me skill was used for the design discussion. Continue resolving genuine design dependencies, but do not re-ask already accepted decisions above.
+
+Current planner entry points are `MedNeXtPlannerM` and `MedNeXtPlannerL`; the unreleased legacy `MedNeXtPlanner` entry point was removed. Both use checkpoint-aware provisional peak estimation. See mednext.md for current recipes and calibration assumptions.
